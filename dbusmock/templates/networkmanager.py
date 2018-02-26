@@ -32,6 +32,7 @@ MANAGER_OBJ = '/org/freedesktop/NetworkManager'
 SETTINGS_OBJ = '/org/freedesktop/NetworkManager/Settings'
 SETTINGS_IFACE = 'org.freedesktop.NetworkManager.Settings'
 DEVICE_IFACE = 'org.freedesktop.NetworkManager.Device'
+IP4_CONFIG_IFACE = 'org.freedesktop.NetworkManager.IP4Config'
 WIRELESS_DEVICE_IFACE = 'org.freedesktop.NetworkManager.Device.Wireless'
 ACCESS_POINT_IFACE = 'org.freedesktop.NetworkManager.AccessPoint'
 CSETTINGS_IFACE = 'org.freedesktop.NetworkManager.Settings.Connection'
@@ -137,7 +138,8 @@ class NM80211ApSecurityFlags:
     NAME_MAP = {
         NM_802_11_AP_SEC_KEY_MGMT_PSK: {
             'key-mgmt': 'wpa-psk',
-            'auth-alg': 'open'
+            'auth-alg': 'open',
+            'psk': '12345678'
         },
     }
 
@@ -259,14 +261,23 @@ def SetConnectivity(self, connectivity):
 
 
 @dbus.service.method(MOCK_IFACE,
-                     in_signature='ss', out_signature='')
-def SetDeviceActive(self, device_path, active_connection_path):
+                     in_signature='sss', out_signature='')
+def SetDeviceActive(self, device_path, active_connection_path, ip_address='192.168.0.1'):
     dev_obj = dbusmock.get_object(device_path)
     dev_obj.Set(DEVICE_IFACE, 'ActiveConnection', dbus.ObjectPath(active_connection_path))
     old_state = dev_obj.Get(DEVICE_IFACE, 'State')
     dev_obj.Set(DEVICE_IFACE, 'State', dbus.UInt32(DeviceState.ACTIVATED))
 
     dev_obj.EmitSignal(DEVICE_IFACE, 'StateChanged', 'uuu', [dbus.UInt32(DeviceState.ACTIVATED), old_state, dbus.UInt32(1)])
+
+    ip4_config_path = '/org/freedesktop/NetworkManager/IP4Config/0'
+    self.AddObject(ip4_config_path, IP4_CONFIG_IFACE, {
+        'AddressData': dbus.Array([{
+            'address': dbus.String(ip_address),
+            'prefix': dbus.UInt32(24)
+        }], signature='a{sv}')}, [])
+
+    dev_obj.Set(DEVICE_IFACE, 'Ip4Config', dbus.ObjectPath(ip4_config_path))
 
 
 @dbus.service.method(MOCK_IFACE,
@@ -377,6 +388,7 @@ def AddWiFiDevice(self, device_name, iface_name, state):
                               'State': dbus.UInt32(state),
                               'Interface': iface_name,
                               'IpInterface': iface_name,
+                              'Ip4Config': dbus.ObjectPath('/')
                           })
 
     self.object_manager_emit_added(path)
@@ -544,8 +556,8 @@ def AddWiFiConnection(self, dev_path, connection_name, ssid_name, key_mgmt):
 
 
 @dbus.service.method(MOCK_IFACE,
-                     in_signature='assssu', out_signature='s')
-def AddActiveConnection(self, devices, connection_device, specific_object, name, state):
+                     in_signature='assssus', out_signature='s')
+def AddActiveConnection(self, devices, connection_device, specific_object, name, state, ip_address):
     '''Add an active connection to an existing WiFi device.
 
     You have to a list of the involved WiFi devices, the connection path,
@@ -582,7 +594,7 @@ def AddActiveConnection(self, devices, connection_device, specific_object, name,
                    [])
 
     for dev_path in devices:
-        self.SetDeviceActive(dev_path, active_connection_path)
+        self.SetDeviceActive(dev_path, active_connection_path, ip_address)
 
     self.object_manager_emit_added(active_connection_path)
 
