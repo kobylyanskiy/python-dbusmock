@@ -156,6 +156,8 @@ class NM80211ApFlags:
 def activate_connection(self, conn, dev, ap):
     # find a new name
     count = 0
+    dev_obj = dbusmock.get_object(dev)
+    dev_obj.Set(DEVICE_IFACE, 'State', dbus.UInt32(DeviceState.ACTIVATED))
     active_connections = dbusmock.get_object(MANAGER_OBJ).Get(MANAGER_IFACE, 'ActiveConnections')
     while True:
         path = dbus.ObjectPath('/org/freedesktop/NetworkManager/ActiveConnection/' + str(count))
